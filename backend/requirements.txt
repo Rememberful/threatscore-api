@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+asyncpg
+sqlalchemy[asyncio]
+psycopg2-binary
+python-jose[cryptography]
+passlib[bcrypt]
+lightgbm
+scikit-learn
+shap
+numpy
+pandas
+python-dotenv
+slowapi
+python-multipart
