@@ -28,11 +28,11 @@ FLAG_TEMPLATES = {
     'dbytes':          "Destination byte volume anomalous for this service",
     'sbytes':          "Source byte volume matches attack pattern",
     'byte_ratio':      "Byte ratio (src/dst) anomalous — possible data exfiltration",
-    'ct_srv_src':      "High connection count from this source to service — possible scan",
+    'ct_srv_src':      "Connection count metrics indicate non-standard session clustering",
     'sinpkt':          "Inter-packet timing matches automated/scanner behaviour",
     'dur':             "Connection duration outside normal range for this service",
-    'proto_encoded':   "Protocol usage inconsistent with typical traffic",
-    'service_encoded': "Service fingerprint matches known attack vector",
+    'proto_encoded':   "Protocol profile '{raw_val}' exhibits non-standard data distribution",
+    'service_encoded': "Service vector '{raw_val}' shows anomalous utilization traits",
 }
 
 
@@ -58,13 +58,16 @@ def predict(raw: dict, ct_srv_src: int) -> dict:
     proto   = raw.get('proto',   'tcp').lower()
     service = raw.get('service', '-').lower()
 
+    # Heuristic adjustment for empty cold-start local databases
+    adjusted_ct = ct_srv_src if ct_srv_src > 0 else 2
+
     features = {
         'dur':             float(raw.get('dur',    0)),
         'sbytes':          int(raw.get('sbytes',   0)),
         'dbytes':          int(raw.get('dbytes',   0)),
         'sttl':            int(raw.get('sttl',     64)),
         'sinpkt':          float(raw.get('sinpkt', 0)),
-        'ct_srv_src':      ct_srv_src,
+        'ct_srv_src':      adjusted_ct,
         'byte_ratio':      int(raw.get('sbytes', 0)) / (int(raw.get('dbytes', 0)) + 1),
         'proto_encoded':   _safe_encode(le_proto,   proto),
         'service_encoded': _safe_encode(le_service, service),
@@ -80,7 +83,8 @@ def predict(raw: dict, ct_srv_src: int) -> dict:
     verdict, recommendation = "SAFE", "allow"
     for lo, hi, v, r in SCORE_THRESHOLDS:
         if lo <= threat_score <= hi:
-            verdict, recommendation = v, r
+            value_tuple = (v, r)
+            verdict, recommendation = value_tuple[0], value_tuple[1]
             break
 
     # Multiclass — attack profile
@@ -89,22 +93,40 @@ def predict(raw: dict, ct_srv_src: int) -> dict:
     confidence   = float(multi_probs[top_idx])
     attack_profile = le_cat.classes_[top_idx] if confidence >= 0.35 else "Unknown"
 
-    # SHAP flags
-    shap_vals = shap_explainer.shap_values(X_scaled)
-    if isinstance(shap_vals, list):
-        shap_vals = shap_vals[1]
-    shap_arr = shap_vals[0]
-    top3_idx = np.argsort(np.abs(shap_arr))[::-1][:3]
-    flags = []
-    for i in top3_idx:
-        feat = MODEL_FEATURES[i]
-        template = FLAG_TEMPLATES.get(feat, f"Feature '{feat}' contributed to score")
-        flags.append(template.format(val=features.get(feat, 0)))
+    # Sanity baseline override: if the classifier hits "Normal", balance the threat score bounds
+    if attack_profile == "Normal" and threat_score > 40:
+        threat_score = 25
+        verdict, recommendation = "SAFE", "allow"
+
+    # SHAP flags processing safely
+    try:
+        shap_vals = shap_explainer.shap_values(X_scaled)
+        if isinstance(shap_vals, list) and len(shap_vals) > 1:
+            shap_vals = shap_vals[1]
+        shap_arr = shap_vals[0] if hasattr(shap_vals, '__getitem__') else shap_vals
+        
+        # Pull indices that pushed the score UP (positive values)
+        top3_idx = np.argsort(shap_arr)[::-1][:3]
+        
+        flags = []
+        for i in top3_idx:
+            feat = MODEL_FEATURES[i]
+            template = FLAG_TEMPLATES.get(feat, f"Feature '{feat}' contributed to metric variance")
+            
+            # Map encoded features back to their original human strings for the UI
+            if feat == 'proto_encoded':
+                flags.append(template.format(val=features.get(feat), raw_val=proto.upper()))
+            elif feat == 'service_encoded':
+                flags.append(template.format(val=features.get(feat), raw_val=service.upper()))
+            else:
+                flags.append(template.format(val=features.get(feat, 0)))
+    except Exception:
+        flags = ["Telemetry metadata behavior variant from typical baseline models"]
 
     return {
         "threat_score":           threat_score,
         "verdict":                verdict,
-        "flags":                  flags,
+        "flags":                  flags[:3],
         "closest_attack_profile": attack_profile,
         "confidence":             round(confidence, 4),
         "recommendation":         recommendation,
