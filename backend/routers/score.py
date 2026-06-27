@@ -4,6 +4,7 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from typing import Optional
 import asyncio
 
 from db import get_db, ApiKey, ScoreLog
@@ -39,12 +40,15 @@ async def resolve_api_key(x_api_key: str = Header(...), db: AsyncSession = Depen
 @router.post("/score")
 @limiter.limit("60/minute")
 async def score_request(
-    request: Request,
-    body:    ScoreIn,
-    api_key: ApiKey        = Depends(resolve_api_key),
-    db:      AsyncSession  = Depends(get_db),
+    request:            Request,
+    body:               ScoreIn,
+    api_key:            ApiKey        = Depends(resolve_api_key),
+    db:                 AsyncSession  = Depends(get_db),
+    x_threatscore_mode: Optional[str] = Header(default=None),
 ):
-    # Run ct_srv_src, geo, history, velocity in parallel
+    is_shadow = (x_threatscore_mode or "").lower() == "shadow"
+
+    # Run everything in parallel
     ct_srv_src, geo, history, velocity = await asyncio.gather(
         get_ct_srv_src(db, api_key.id, body.srcip, body.service),
         get_geo(body.srcip),
@@ -52,10 +56,10 @@ async def score_request(
         get_velocity(db, api_key.id, body.srcip),
     )
 
-    # Run ML inference
+    # ML inference
     result = predict(body.dict(), ct_srv_src)
 
-    # Log to DB
+    # Log to DB (always log, even in shadow mode — that's the point)
     log = ScoreLog(
         api_key_id             = api_key.id,
         srcip                  = body.srcip,
@@ -76,10 +80,10 @@ async def score_request(
     db.add(log)
     await db.commit()
 
-    # Return enriched response
     return {
         **result,
-        "geo":      geo,
-        "history":  history,
-        "velocity": velocity,
+        "geo":       geo,
+        "history":   history,
+        "velocity":  velocity,
+        "simulated": is_shadow,
     }
