@@ -6,11 +6,13 @@ const API = import.meta.env.VITE_API_URL || "http://localhost:8000"
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(null)
-  const [user, setUser]   = useState(null)
+  const [token, setToken] = useState(() => sessionStorage.getItem("ts_token"))
+  const [user, setUser]   = useState(() => sessionStorage.getItem("ts_user"))
 
   const login = async (email, password) => {
     const res = await axios.post(`${API}/auth/login`, { email, password })
+    sessionStorage.setItem("ts_token", res.data.token)
+    sessionStorage.setItem("ts_user", email)
     setToken(res.data.token)
     setUser(email)
     return res.data.token
@@ -20,7 +22,12 @@ export function AuthProvider({ children }) {
     await axios.post(`${API}/auth/register`, { email, password })
   }
 
-  const logout = () => { setToken(null); setUser(null) }
+  const logout = () => {
+    sessionStorage.removeItem("ts_token")
+    sessionStorage.removeItem("ts_user")
+    setToken(null)
+    setUser(null)
+  }
 
   const authHeader = () => ({ Authorization: `Bearer ${token}` })
 
