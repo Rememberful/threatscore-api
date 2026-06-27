@@ -9,7 +9,7 @@ from db import init_db
 from services.ml_service import load_models
 from routers import auth, score, dashboard
 
-
+import os
 limiter = Limiter(key_func=get_remote_address)
 
 
@@ -27,12 +27,12 @@ app = FastAPI(title="ThreatScore API", version="1.0.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+RAW_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+ALLOWED_ORIGINS = [o.strip() for o in RAW_ORIGINS.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://threatscore-dashboard.onrender.com",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
