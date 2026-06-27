@@ -54,6 +54,15 @@ class ScoreLog(Base):
     recommendation         = Column(Text)
     created_at             = Column(TIMESTAMP, server_default=func.now())
 
+class IPList(Base):
+    __tablename__ = "ip_lists"
+    id         = Column(Integer, primary_key=True)
+    api_key_id = Column(Integer, ForeignKey("api_keys.id"))
+    srcip      = Column(Text, nullable=False)
+    list_type  = Column(Text, nullable=False)  # 'block' or 'allow'
+    reason     = Column(Text)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
 
 # ── Dependency ────────────────────────────────────────────────────────────────
 
