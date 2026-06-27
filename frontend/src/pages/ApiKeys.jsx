@@ -77,7 +77,7 @@ export default function ApiKeys() {
       <div className="card">
         <h2 className="text-sm font-medium text-offwhite mb-4">Active keys</h2>
         {keys.length === 0 ? (
-          <p className="text-steel text-sm">No keys yet. Generate your first one above.</p>
+          <p className="text-steel text-sm">No active keys. Previously generated keys cannot be retrieved — generate a new one above.</p>
         ) : (
           <table className="w-full text-sm">
             <thead>
