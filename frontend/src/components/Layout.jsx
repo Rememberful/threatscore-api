@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
-
+import Footer from "./Footer"
 const nav = [
   { to: "/feed",      label: "Live Feed",  icon: "⚡" },
   { to: "/analytics", label: "Analytics",  icon: "📊" },
@@ -48,6 +48,12 @@ export default function Layout() {
       {/* Main */}
       <main className="flex-1 overflow-y-auto bg-navy">
         <Outlet />
+        <main className="flex-1 overflow-y-auto bg-navy flex flex-col">
+  <div className="flex-1">
+    <Outlet />
+  </div>
+  <Footer />
+</main>
       </main>
     </div>
   )

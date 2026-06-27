@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom"
+import Footer from "../components/Footer"
 
 const snippet = `const res = await fetch("https://threatscore.onrender.com/api/score", {
   method: "POST",
@@ -87,6 +88,7 @@ export default function Landing() {
         <p className="text-steel mb-6">Free tier. No credit card.</p>
         <Link to="/register" className="btn-primary px-8 py-3 text-base">Create free account</Link>
       </section>
+      <Footer />
     </div>
   )
 }
