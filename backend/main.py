@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from db import init_db
 from services.ml_service import load_models
-from routers import auth, score, dashboard
+from routers import auth, score, dashboard, iplist
 
 import os
 limiter = Limiter(key_func=get_remote_address)
@@ -41,7 +41,7 @@ app.add_middleware(
 app.include_router(auth.router,      prefix="/auth")
 app.include_router(score.router,     prefix="/api")
 app.include_router(dashboard.router, prefix="/dashboard")
-
+app.include_router(iplist.router, prefix="/api")
 
 @app.get("/api/health")
 async def health():
