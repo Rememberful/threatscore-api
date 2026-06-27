@@ -4,10 +4,11 @@ from sqlalchemy import select
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+import asyncio
 
 from db import get_db, ApiKey, ScoreLog
 from services.ml_service import predict
-from services.feature_service import get_ct_srv_src
+from services.feature_service import get_ct_srv_src, get_geo, get_history, get_velocity
 from services.auth_service import hash_api_key
 
 router  = APIRouter(tags=["score"])
@@ -43,10 +44,18 @@ async def score_request(
     api_key: ApiKey        = Depends(resolve_api_key),
     db:      AsyncSession  = Depends(get_db),
 ):
-    ct_srv_src = await get_ct_srv_src(db, api_key.id, body.srcip, body.service)
+    # Run ct_srv_src, geo, history, velocity in parallel
+    ct_srv_src, geo, history, velocity = await asyncio.gather(
+        get_ct_srv_src(db, api_key.id, body.srcip, body.service),
+        get_geo(body.srcip),
+        get_history(db, api_key.id, body.srcip),
+        get_velocity(db, api_key.id, body.srcip),
+    )
 
+    # Run ML inference
     result = predict(body.dict(), ct_srv_src)
 
+    # Log to DB
     log = ScoreLog(
         api_key_id             = api_key.id,
         srcip                  = body.srcip,
@@ -67,4 +76,10 @@ async def score_request(
     db.add(log)
     await db.commit()
 
-    return result
+    # Return enriched response
+    return {
+        **result,
+        "geo":      geo,
+        "history":  history,
+        "velocity": velocity,
+    }
